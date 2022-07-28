@@ -12,7 +12,7 @@ namespace KSEM_Client;
 public class KSEMClient
 {
     private string _hostEndpoint;
-    private LoginResponseData? _loginResponseData;
+    public LoginResponseData? _loginResponseData;
 
     public KSEMClient(string hostEndpoint)
     {
