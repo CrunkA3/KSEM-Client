@@ -7,9 +7,12 @@
     <Nullable>enable</Nullable>
 
     <IsPackable>false</IsPackable>
+
+    <UserSecretsId>4ed2afa0-2fc6-45dd-bd09-ee28767dd2af</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="5.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="2.2.8" />
     <PackageReference Include="MSTest.TestFramework" Version="2.2.8" />
@@ -18,6 +21,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KSEM-Client\KSEM-Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update=".runsettings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+    </None>
   </ItemGroup>
 
 </Project>
