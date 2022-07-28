@@ -11,11 +11,16 @@ namespace KSEM_Client.Tests
         [AssemblyInitialize]
         public static async Task Init(TestContext testContext)
         {
-            UnitTest1.testContext = testContext;
-            client = new KSEMClient("http://ksem-76555758");
-
             var password = testContext.Properties["KsemPassword"]?.ToString();
+            var host = testContext.Properties["KsemHost"]?.ToString();
+
             if (string.IsNullOrEmpty(password)) throw new ArgumentNullException(nameof(password), "Please set 'KsemPassword' in your .runsettings file");
+            if (string.IsNullOrEmpty(host)) throw new ArgumentNullException(nameof(password), "Please set 'KsemHost' in your .runsettings file");
+
+            UnitTest1.testContext = testContext;
+            client = new KSEMClient(host);
+
+
             await client.LoginAsync(password);
         }
 
@@ -26,6 +31,17 @@ namespace KSEM_Client.Tests
         {
             var status = await client!.GetDeviceStatusAsync();
             Assert.IsNotNull(status);
+        }
+
+
+
+        [TestMethod]
+        public async Task TestSocket()
+        {
+            //http://ksem-76555758/api/data-transfer/protobuf/gdr/local/config/smart-meter
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            await client!.StartSocketAsync(cancellationTokenSource.Token);
         }
     }
 }

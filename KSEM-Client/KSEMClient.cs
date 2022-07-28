@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Security;
 using System.Text.Json;
 
@@ -50,6 +51,25 @@ public class KSEMClient
 
         httpResponse.EnsureSuccessStatusCode();
         return await httpResponse.Content.ReadFromJsonAsync<DeviceStatus>(cancellationToken: cancellationToken);
+    }
+
+
+    public async Task StartSocketAsync(CancellationToken cancellationToken)
+    {
+        if (_loginResponseData == null) throw new Exception("you have to login first");
+
+        var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri("ws://ksem-76555758/api/data-transfer/ws/protobuf/gdr/local/values/smart-meter"), cancellationToken);
+
+        var data = System.Text.Encoding.UTF8.GetBytes("Bearer " + _loginResponseData.AccessToken);
+        await socket.SendAsync(data, WebSocketMessageType.Text, true, cancellationToken);
+
+        var buff = new byte[1024];
+
+        var result = await socket.ReceiveAsync(buff, cancellationToken);
+        var count = result.Count;
+        var resultString = System.Text.Encoding.UTF8.GetString(buff, 0, count);
+        Console.WriteLine(resultString);
     }
 
 }
