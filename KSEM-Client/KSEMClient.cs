@@ -42,10 +42,10 @@ public class KSEMClient
 
     public async Task<DeviceStatus?> GetDeviceStatusAsync(CancellationToken cancellationToken = default)
     {
-        if (_loginResponseData == null) throw new Exception("you have to login first");
+        EnsureLogin();
 
         HttpClient httpClient = new();
-        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _loginResponseData.AccessToken);
+        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _loginResponseData!.AccessToken);
         Uri requestUri = new(_hostEndpoint + "device-settings/devicestatus");
         var httpResponse = await httpClient.GetAsync(requestUri, cancellationToken);
 
@@ -54,14 +54,28 @@ public class KSEMClient
     }
 
 
+
+    public async Task<byte[]> GetProtoBuf(CancellationToken cancellationToken = default)
+    {
+        EnsureLogin();
+
+        HttpClient httpClient = new();
+        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _loginResponseData!.AccessToken);
+        Uri requestUri = new(_hostEndpoint + "data-transfer/protobuf/gdr/local/config/smart-meter");
+        var httpResponse = await httpClient.GetAsync(requestUri, cancellationToken);
+
+        httpResponse.EnsureSuccessStatusCode();
+        return await httpResponse.Content.ReadAsByteArrayAsync(cancellationToken: cancellationToken);
+    }
+
     public async Task StartSocketAsync(CancellationToken cancellationToken)
     {
-        if (_loginResponseData == null) throw new Exception("you have to login first");
+        EnsureLogin();
 
         var socket = new ClientWebSocket();
         await socket.ConnectAsync(new Uri("ws://ksem-76555758/api/data-transfer/ws/protobuf/gdr/local/values/smart-meter"), cancellationToken);
 
-        var data = System.Text.Encoding.UTF8.GetBytes("Bearer " + _loginResponseData.AccessToken);
+        var data = System.Text.Encoding.UTF8.GetBytes("Bearer " + _loginResponseData!.AccessToken);
         await socket.SendAsync(data, WebSocketMessageType.Text, true, cancellationToken);
 
         var buff = new byte[1024];
@@ -72,4 +86,10 @@ public class KSEMClient
         Console.WriteLine(resultString);
     }
 
+
+
+    private void EnsureLogin()
+    {
+        if (_loginResponseData == null || string.IsNullOrEmpty(_loginResponseData.AccessToken)) throw new Exception("you have to login first");
+    }
 }

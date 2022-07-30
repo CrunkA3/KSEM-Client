@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using System.Net.WebSockets;
 using System.Threading;
 
-Console.WriteLine("Hello, World!");
 
 
 var configuration = new ConfigurationBuilder()
@@ -20,63 +19,180 @@ var cancellationToken = cancellationTokenSource.Token;
 
 
 
-var ksmeClient = new KSEMClient("http://ksem-76555758");
+var ksemClient = new KSEMClient("http://ksem-76555758");
 
-await ksmeClient.LoginAsync(password);
-if (ksmeClient._loginResponseData == null || string.IsNullOrEmpty(ksmeClient._loginResponseData.AccessToken)) throw new Exception("you have to login first");
+await ksemClient.LoginAsync(password);
+if (ksemClient._loginResponseData == null || string.IsNullOrEmpty(ksemClient._loginResponseData.AccessToken)) throw new Exception("you have to login first");
 
 
+var config = await ksemClient.GetProtoBuf(cancellationToken);
+var configFS = new FileStream("config.dat", FileMode.Create);
+await configFS.WriteAsync(config, cancellationToken);
+configFS.Close();
+await configFS.DisposeAsync();
 
 var socket = new ClientWebSocket();
 await socket.ConnectAsync(new Uri("ws://ksem-76555758/api/data-transfer/ws/protobuf/gdr/local/values/smart-meter"), cancellationToken);
 
-var data = System.Text.Encoding.UTF8.GetBytes("Bearer " + ksmeClient._loginResponseData.AccessToken);
+var data = System.Text.Encoding.UTF8.GetBytes("Bearer " + ksemClient._loginResponseData.AccessToken);
 await socket.SendAsync(data, WebSocketMessageType.Text, true, cancellationToken);
 
 var buff = new byte[1024];
 
-while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+
+var fs = new StreamWriter("dataList.binary");
+cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(120));
+ushort prevTimestamp = 0;
+
+try
 {
-    var result = await socket.ReceiveAsync(buff, cancellationToken);
-    var count = result.Count;
 
-    var fs = new FileStream("data.binary", FileMode.Create);
-    await fs.WriteAsync(buff, 0, count);
-    fs.Close();
-    await fs.DisposeAsync();
+    while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+    {
+        var result = await socket.ReceiveAsync(buff, cancellationToken);
+        var count = result.Count;
 
 
-    var ms = new MemoryStream(buff, 0, count);
 
-    var reader = new BinaryReader(ms);
-
-    //smartmeter pos1
-    ms.Position = 4;
-    var smartMeterText1 = reader.ReadString();
-    Console.Write(smartMeterText1);
-    Console.Write('\t');
-    Console.Write(reader.ReadInt64());
-
-    //smartmeter pos2
-    ms.Position = 20;
-    var smartMeterText2 = reader.ReadString();
-    Console.Write(smartMeterText2);
-    Console.Write('\t');
-    ms.Position = 96;
-    Console.Write(reader.ReadHalf());
+        var hexString = string.Join(' ', buff.Take(count));
+        await fs.WriteLineAsync(hexString);
 
 
-    Console.WriteLine();
+        var ms = new MemoryStream(buff, 0, count);
 
-    //Console.WriteLine(reader.ReadInt16() + ", " + reader.ReadInt16() + ", " + reader.ReadInt16());
+        var reader = new BinaryReader(ms);
 
-    //ms.Position = 0;
-    //Console.WriteLine(reader.ReadUInt16() + ", " + reader.ReadUInt16() + ", " + reader.ReadUInt16());
+        //smartmeter pos1
+        var lineFeed1 = reader.ReadChar();
 
-    //ms.Position = 0;
-    //Console.WriteLine(reader.ReadInt32() + ", " + reader.ReadInt32() + ", " + reader.ReadInt32());
+        //134 ? ???
+        //135 ? ???
+        //136 ? ???
+        //137 = EnergyPhase?
+        var messageType1 = reader.ReadByte();
+        //if (messageType1 != 137) continue;
 
-    //ms.Position = 0;
-    //Console.WriteLine(reader.ReadUInt32() + ", " + reader.ReadUInt32() + ", " + reader.ReadUInt32());
+
+        if (messageType1 == 134)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+        }
+        else if (messageType1 == 135)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
+        }
+        else if (messageType1 == 136)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkBlue;
+        }
+        else if (messageType1 == 137)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+        }
+        else
+        {
+            Console.ResetColor();
+        }
+
+        Console.Write(DateTime.Now);
+        Console.Write('\t');
+        Console.Write(messageType1);
+        Console.Write('\t');
+
+
+
+
+        var accept1 = reader.ReadByte();
+        var lineFeed2 = reader.ReadChar();
+
+        //as erste mal smart-meter
+        var smartMeterText1 = reader.ReadString();
+
+        var steuerrkennzeichen1 = reader.ReadByte();
+        var messageType2 = reader.ReadByte();
+        var steuerrkennzeichen2 = reader.ReadByte();
+
+        var lineFeed3 = reader.ReadChar();
+
+        //as zweite mal smart-meter
+        var smartMeterText2 = reader.ReadString();
+
+        var dle1 = reader.ReadByte();
+        var startOfHeading1 = reader.ReadByte();
+
+
+        //DataType 26 = TimeStamp with value?
+        var dataType1 = reader.ReadByte();
+        Console.Write(dataType1);
+        Console.Write('\t');
+
+
+        var lengthTimestamp = reader.ReadByte();
+        var timeStampBuffer = reader.ReadBytes(lengthTimestamp);
+
+        var timestamp1 = BitConverter.ToUInt16(timeStampBuffer[0..2].Reverse().ToArray());
+        //if (timestamp1 == prevTimestamp) continue;
+        prevTimestamp = timestamp1;
+
+        var timeStamp = BitConverter.ToUInt32(timeStampBuffer, 1);
+        var timeStampValue = BitConverter.ToUInt32(timeStampBuffer, 7);
+        var timeStampPhaseId = lengthTimestamp >= 12 ? (byte?)timeStampBuffer[11] : null;
+
+        Console.Write(timeStampBuffer[0]);
+        Console.Write('\t');
+        Console.Write(timeStamp);
+        Console.Write('\t');
+        Console.Write(timeStampBuffer[5]);
+        Console.Write('\t');
+        Console.Write(timeStampBuffer[6]);
+        Console.Write('\t');
+        Console.Write(timeStampValue);
+        Console.Write('\t');
+        Console.Write(timeStampPhaseId);
+        Console.Write('\t');
+
+
+
+        //DataType 34 = ???
+        var dataType2 = reader.ReadByte();
+        Console.Write(dataType2);
+        Console.Write('\t');
+        var lengthDataType2 = reader.ReadByte();
+        Console.Write(lengthDataType2);
+        Console.Write('\t');
+        var dataType2Buffer = reader.ReadBytes(lengthDataType2);
+
+        Console.Write('\t');
+        Console.Write(BitConverter.ToString(dataType2Buffer));
+        Console.Write('\t');
+
+
+
+
+        Console.WriteLine();
+
+        //Console.WriteLine(reader.ReadInt16() + ", " + reader.ReadInt16() + ", " + reader.ReadInt16());
+
+        //ms.Position = 0;
+        //Console.WriteLine(reader.ReadUInt16() + ", " + reader.ReadUInt16() + ", " + reader.ReadUInt16());
+
+        //ms.Position = 0;
+        //Console.WriteLine(reader.ReadInt32() + ", " + reader.ReadInt32() + ", " + reader.ReadInt32());
+
+        //ms.Position = 0;
+        //Console.WriteLine(reader.ReadUInt32() + ", " + reader.ReadUInt32() + ", " + reader.ReadUInt32());
+
+    }
 
 }
+catch (TaskCanceledException) { }
+catch (Exception)
+{
+    throw;
+}
+finally
+{
+    fs.Close();
+    await fs.DisposeAsync();
+}
+
