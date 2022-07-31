@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using KSEM_Client;
+using KSME_Websocket;
 using Microsoft.Extensions.Configuration;
 using System.Net.WebSockets;
 using System.Threading;
@@ -40,9 +41,7 @@ await socket.SendAsync(data, WebSocketMessageType.Text, true, cancellationToken)
 var buff = new byte[1024];
 
 
-var fs = new StreamWriter("dataList.binary");
 cancellationTokenSource.CancelAfter(TimeSpan.FromSeconds(120));
-ushort prevTimestamp = 0;
 
 try
 {
@@ -55,7 +54,6 @@ try
 
 
         var hexString = string.Join(' ', buff.Take(count));
-        await fs.WriteLineAsync(hexString);
 
 
         var ms = new MemoryStream(buff, 0, count);
@@ -65,13 +63,11 @@ try
         //smartmeter pos1
         var lineFeed1 = reader.ReadChar();
 
-        //134 ? ???
-        //135 ? ???
-        //136 ? ???
+
         //137 = EnergyPhase?
         var messageType1 = reader.ReadByte();
         //if (messageType1 != 137) continue;
-
+        var fs = new StreamWriter($"messages_{messageType1}.dat", true);
 
         if (messageType1 == 134)
         {
@@ -96,6 +92,9 @@ try
 
         Console.Write(DateTime.Now);
         Console.Write('\t');
+        fs.Write(DateTime.Now.ToString());
+        fs.Write('\t');
+
         Console.Write(messageType1);
         Console.Write('\t');
 
@@ -121,67 +120,17 @@ try
         var startOfHeading1 = reader.ReadByte();
 
 
-        //DataType 26 = TimeStamp with value?
-        var dataType1 = reader.ReadByte();
-        Console.Write(dataType1);
-        Console.Write('\t');
-
-
-        var lengthTimestamp = reader.ReadByte();
-        var timeStampBuffer = reader.ReadBytes(lengthTimestamp);
-
-        var timestamp1 = BitConverter.ToUInt16(timeStampBuffer[0..2].Reverse().ToArray());
-        //if (timestamp1 == prevTimestamp) continue;
-        prevTimestamp = timestamp1;
-
-        var timeStamp = BitConverter.ToUInt32(timeStampBuffer, 1);
-        var timeStampValue = BitConverter.ToUInt32(timeStampBuffer, 7);
-        var timeStampPhaseId = lengthTimestamp >= 12 ? (byte?)timeStampBuffer[11] : null;
-
-        Console.Write(timeStampBuffer[0]);
-        Console.Write('\t');
-        Console.Write(timeStamp);
-        Console.Write('\t');
-        Console.Write(timeStampBuffer[5]);
-        Console.Write('\t');
-        Console.Write(timeStampBuffer[6]);
-        Console.Write('\t');
-        Console.Write(timeStampValue);
-        Console.Write('\t');
-        Console.Write(timeStampPhaseId);
-        Console.Write('\t');
-
-
-
-        //DataType 34 = ???
-        var dataType2 = reader.ReadByte();
-        Console.Write(dataType2);
-        Console.Write('\t');
-        var lengthDataType2 = reader.ReadByte();
-        Console.Write(lengthDataType2);
-        Console.Write('\t');
-        var dataType2Buffer = reader.ReadBytes(lengthDataType2);
-
-        Console.Write('\t');
-        Console.Write(BitConverter.ToString(dataType2Buffer));
-        Console.Write('\t');
-
-
-
-
+        while (reader.BaseStream.Position < count)
+        {
+            var messageData = reader.ReadData();
+            fs.Write('\t');
+            fs.Write(messageData.ToString());
+            Console.Write('\t');
+            Console.Write(messageData.ToString());
+        }
+        fs.WriteLine();
         Console.WriteLine();
-
-        //Console.WriteLine(reader.ReadInt16() + ", " + reader.ReadInt16() + ", " + reader.ReadInt16());
-
-        //ms.Position = 0;
-        //Console.WriteLine(reader.ReadUInt16() + ", " + reader.ReadUInt16() + ", " + reader.ReadUInt16());
-
-        //ms.Position = 0;
-        //Console.WriteLine(reader.ReadInt32() + ", " + reader.ReadInt32() + ", " + reader.ReadInt32());
-
-        //ms.Position = 0;
-        //Console.WriteLine(reader.ReadUInt32() + ", " + reader.ReadUInt32() + ", " + reader.ReadUInt32());
-
+        fs.Close();
     }
 
 }
@@ -190,9 +139,3 @@ catch (Exception)
 {
     throw;
 }
-finally
-{
-    fs.Close();
-    await fs.DisposeAsync();
-}
-
